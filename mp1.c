@@ -8,19 +8,70 @@
  * system unless explicitly requested by name.
  */
 
+#include <asm-generic/errno-base.h>
+// #include <stdio.h>
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/init.h>
+#include <stddef.h>
+#include <linux/printk.h>
+#include <linux/seq_file.h>
+#include <linux/string.h>
 #include <linux/module.h>
 #include <linux/printk.h>
-
+#include <linux/proc_fs.h>
+#define FOLDER_NAME	"mp1"
+#define FILE_NAME	"status"
 // !!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!
 // Please put your name and email here
-MODULE_AUTHOR("Tianyin Xu <tyxu@illinois.edu>");
+MODULE_AUTHOR("Vihaan Rao <vihaanr2@illinois.edu>");
 MODULE_LICENSE("GPL");
+
+struct proc_dir_entry *proc_dir = NULL;
+
+// temp proc printf callback
+static int myproc_show(struct seq_file *m, void *v)
+{
+    seq_printf(m, "Hello from procfs directory!\n");
+    return 0;
+}
+
+// temp proc open callback
+static int open_callback(struct inode *inode, struct  file *file) {
+  return single_open(file, myproc_show, NULL);
+}
+
+// procfs file ops for entry
+static const struct proc_ops fops = {
+	.proc_open = open_callback,
+	.proc_read = seq_read,
+};
+
+static int make_proc_entry(void)
+{
+	struct proc_dir_entry *entry = NULL;
+	proc_dir = proc_mkdir(FOLDER_NAME, NULL);
+	if (proc_dir == NULL) {
+		printk("unable to create directory 'mp1'");
+		return -ENOMEM;
+	}
+	
+	entry = proc_create("status", 0666, proc_dir, &fops);
+	if (entry == NULL) {
+		printk("unable to create entry 'status'");
+		remove_proc_entry(FOLDER_NAME, NULL);
+		return -ENOMEM;
+	}
+
+	printk("successfully created /proc/%s/%s", FOLDER_NAME, FILE_NAME);
+	return 0;
+}
+
+
 
 static int __init test_module_init(void)
 {
+	make_proc_entry();
 	pr_warn("Hello, world\n");
 
 	return 0;
@@ -29,7 +80,9 @@ static int __init test_module_init(void)
 module_init(test_module_init);
 
 static void __exit test_module_exit(void)
-{
+{	
+	remove_proc_entry(FILE_NAME, proc_dir);
+	remove_proc_entry(FOLDER_NAME, NULL);
 	pr_warn("Goodbye\n");
 }
 
