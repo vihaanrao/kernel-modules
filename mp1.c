@@ -20,8 +20,8 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
-#define FOLDER_NAME	"mp1"
-#define FILE_NAME	"status"
+#define FOLDER_NAME "mp1"
+#define FILE_NAME "status"
 // !!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!
 // Please put your name and email here
 MODULE_AUTHOR("Vihaan Rao <vihaanr2@illinois.edu>");
@@ -32,13 +32,14 @@ struct proc_dir_entry *proc_dir = NULL;
 // temp proc printf callback
 static int myproc_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "Hello from procfs directory!\n");
-    return 0;
+	seq_printf(m, "Hello from procfs directory!\n");
+	return 0;
 }
 
 // temp proc open callback
-static int open_callback(struct inode *inode, struct  file *file) {
-  return single_open(file, myproc_show, NULL);
+static int open_callback(struct inode *inode, struct file *file)
+{
+	return single_open(file, myproc_show, NULL);
 }
 
 // procfs file ops for entry
@@ -55,7 +56,7 @@ static int make_proc_entry(void)
 		printk("unable to create directory 'mp1'");
 		return -ENOMEM;
 	}
-	
+
 	entry = proc_create("status", 0666, proc_dir, &fops);
 	if (entry == NULL) {
 		printk("unable to create entry 'status'");
@@ -66,8 +67,6 @@ static int make_proc_entry(void)
 	printk("successfully created /proc/%s/%s", FOLDER_NAME, FILE_NAME);
 	return 0;
 }
-
-
 
 static int __init test_module_init(void)
 {
@@ -80,9 +79,9 @@ static int __init test_module_init(void)
 module_init(test_module_init);
 
 static void __exit test_module_exit(void)
-{	
-	remove_proc_entry(FILE_NAME, proc_dir);
-	remove_proc_entry(FOLDER_NAME, NULL);
+{
+	remove_proc_entry(FILE_NAME, proc_dir); // remove 'status' file
+	remove_proc_entry(FOLDER_NAME, NULL); // remove 'mp1' dir
 	pr_warn("Goodbye\n");
 }
 
