@@ -76,13 +76,14 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 				    proc_entry->pid);
 		if (len + to_write >=
 		    4096) { // don't write if exceeds buff size
-			break;
+			printk("error: input exceeds buffer size.") break;
 		}
 		len += to_write;
 	}
 	mutex_unlock(&lock);
 
-	if (*offset >= len) {
+	if (*offset >= len) { // reached EOF
+		// printk("")
 		kfree(kbuffer);
 		return 0;
 	}
@@ -92,6 +93,7 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 	}
 
 	if (copy_to_user(user_buff, kbuffer + *offset, count)) {
+		printk("error: unable to copy kernel buffer to user");
 		kfree(kbuffer);
 		return -EFAULT;
 	}
