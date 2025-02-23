@@ -76,7 +76,8 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 				    proc_entry->pid);
 		if (len + to_write >=
 		    4096) { // don't write if exceeds buff size
-			printk("error: input exceeds buffer size.") break;
+			printk("error: input exceeds buffer size.");
+			break;
 		}
 		len += to_write;
 	}
@@ -157,7 +158,7 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 // procfs file ops for entry
 static const struct proc_ops fops = {
 	// .proc_open = open_callback,
-	.proc_read = proc_read_callb, // TODO: implement
+	.proc_read = proc_read_callb,
 	.proc_write = proc_write_callb
 };
 
