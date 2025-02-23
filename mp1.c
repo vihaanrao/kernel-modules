@@ -9,9 +9,7 @@
  */
 
 #include <asm-generic/errno-base.h>
-#include <bits/pthreadtypes.h>
-#include <stdio.h>
-#include <stdlib.h>
+// #include <stdlib.h>
 // #include <stdio.h>
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
@@ -41,7 +39,7 @@ LIST_HEAD(my_proc_list);
 typedef struct proc_t {
 	int pid;
 	struct list_head list;
-	unsigned long *u_time;
+	unsigned long u_time;
 
 } proc_t;
 
@@ -58,6 +56,49 @@ static int myproc_show(struct seq_file *m, void *v)
 // 	return single_open(file, myproc_show, NULL);
 // }
 
+static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
+			       size_t count, loff_t *offset)
+{
+	struct list_head *ptr;
+	int len = 0;
+	int to_write = 0;
+	// char kbuffer[4096];
+	char *kbuffer = kmalloc(4096, GFP_KERNEL);
+	if (!kbuffer) {
+		return -ENOMEM;
+	}
+	struct proc_t *proc_entry;
+
+	mutex_lock(&lock);
+	list_for_each (ptr, &my_proc_list) {
+		proc_entry = list_entry(ptr, struct proc_t, list);
+		to_write = snprintf(kbuffer + len, 4096 - len, "PID: %d\n",
+				    proc_entry->pid);
+		if (len + to_write >=
+		    4096) { // don't write if exceeds buff size
+			break;
+		}
+		len += to_write;
+	}
+	mutex_unlock(&lock);
+
+	if (*offset >= len) {
+		kfree(kbuffer);
+		return 0;
+	}
+
+	if (count > (len - *offset)) {
+		count = len - *offset;
+	}
+
+	if (copy_to_user(user_buff, kbuffer + *offset, count)) {
+		kfree(kbuffer);
+		return -EFAULT;
+	}
+
+	*offset += count;
+	return count;
+}
 static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 				size_t len, loff_t *offset)
 {
@@ -75,10 +116,9 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 	char *kbuffer = kmalloc(len + 1, GFP_KERNEL); // +1 for \n byte
 	if (kbuffer == NULL) {
 		printk("unable to allocate memory for kernel buffer");
+		kfree(proc_entry);
 		return -ENOMEM;
 	}
-
-	kbuffer[len] = '\0';
 
 	/* copy pid data from usr space */
 	not_copied_bytes = copy_from_user(kbuffer, user_buff, len);
@@ -90,6 +130,9 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 		return -EFAULT;
 	}
 
+	kbuffer[len] = '\0';
+
+	/* parse string in kbuff to int */
 	if (kstrtoint(kbuffer, 10, &pid) != 0) {
 		printk("error in decimal to string conversion for pid");
 		kfree(kbuffer);
@@ -106,6 +149,7 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 	mutex_unlock(&lock);
 
 	// snprintf("DEBUG: The value of the PID is: %d", pid);
+	printk("proc_write_callb: successfully added PID %d\n", pid);
 	return len;
 }
 // procfs file ops for entry
