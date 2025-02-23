@@ -9,17 +9,11 @@
  */
 
 #include <asm-generic/errno-base.h>
-#include <bits/pthreadtypes.h>
-#include <stdio.h>
-#include <stdlib.h>
 // #include <stdio.h>
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/init.h>
-#include <linux/slab.h>
-#include <linux/list.h>
 #include <stddef.h>
-#include <linux/types.h>
 #include <linux/printk.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>
@@ -34,13 +28,9 @@ MODULE_AUTHOR("Vihaan Rao <vihaanr2@illinois.edu>");
 MODULE_LICENSE("GPL");
 
 struct proc_dir_entry *proc_dir = NULL;
-
-static DEFINE_MUTEX(lock);
-LIST_HEAD(my_proc_list);
-
 typedef struct proc_t {
 	int pid;
-	struct list_head list;
+	// list_head here
 	unsigned long *u_time;
 
 } proc_t;
@@ -58,56 +48,7 @@ static int myproc_show(struct seq_file *m, void *v)
 // 	return single_open(file, myproc_show, NULL);
 // }
 
-static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
-				size_t len, loff_t *offset)
-{
-	int pid = 0;
-	int not_copied_bytes = 0;
-
-	/* alloc mem for proc_t struct to hold process entry */
-	struct proc_t *proc_entry = kmalloc(sizeof(proc_t), GFP_KERNEL);
-	if (proc_entry == NULL) {
-		printk("unable to allocate memory for proc_entry struct");
-		return -ENOMEM;
-	}
-
-	/* allocate memory for temp buffer to hold the pid */
-	char *kbuffer = kmalloc(len + 1, GFP_KERNEL); // +1 for \n byte
-	if (kbuffer == NULL) {
-		printk("unable to allocate memory for kernel buffer");
-		return -ENOMEM;
-	}
-
-	kbuffer[len] = '\0';
-
-	/* copy pid data from usr space */
-	not_copied_bytes = copy_from_user(kbuffer, user_buff, len);
-	if (not_copied_bytes > 0) {
-		printk("copy_from_user failed to cpy %d bytes",
-		       not_copied_bytes);
-		kfree(kbuffer);
-		kfree(proc_entry);
-		return -EFAULT;
-	}
-
-	if (kstrtoint(kbuffer, 10, &pid) != 0) {
-		printk("error in decimal to string conversion for pid");
-		kfree(kbuffer);
-		kfree(proc_entry);
-		return -EINVAL;
-	}
-
-	kfree(kbuffer); // done w/ temp kbuffer
-
-	proc_entry->pid = pid;
-	proc_entry->u_time = 0;
-	mutex_lock(&lock);
-	list_add_tail(&proc_entry->list, &my_proc_list);
-	mutex_unlock(&lock);
-
-	// snprintf("DEBUG: The value of the PID is: %d", pid);
-	return len;
-}
+static int proc_write_callb(struct *proc_t, ) // figure out what else to pass in
 // procfs file ops for entry
 static const struct proc_ops fops = {
 	// .proc_open = open_callback,
