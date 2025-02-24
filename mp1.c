@@ -21,15 +21,15 @@
 #include <linux/types.h>
 #include <linux/printk.h>
 #include <linux/seq_file.h>
-#include <linux/workqueue.h>            
+#include <linux/workqueue.h>
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
-
-#define TIMEOUT		5000
-#define FOLDER_NAME	"mp1"
-#define FILE_NAME	"status"
+#include "mp1_given.h"
+#define TIMEOUT 5000
+#define FOLDER_NAME "mp1"
+#define FILE_NAME "status"
 // !!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!
 // Please put your name and email here
 MODULE_AUTHOR("Vihaan Rao <vihaanr2@illinois.edu>");
@@ -41,8 +41,8 @@ static DEFINE_MUTEX(lock);
 
 LIST_HEAD(my_proc_list);
 
-static struct workqueue_struct *mp1_wq;  // Workqueue
-static struct work_struct mp1_work;      // Work item
+static struct workqueue_struct *mp1_wq; // Workqueue
+static struct work_struct mp1_work; // Work item
 struct timer_list my_timer;
 
 typedef struct proc_t {
@@ -81,8 +81,8 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 	mutex_lock(&lock);
 	list_for_each (ptr, &my_proc_list) {
 		proc_entry = list_entry(ptr, struct proc_t, list);
-		to_write = snprintf(kbuffer + len, 4096 - len, "PID: %d\n",
-				    proc_entry->pid);
+		to_write = snprintf(kbuffer + len, 4096 - len, "%d: %zu\n",
+				    proc_entry->pid, proc_entry->u_time);
 		if (len + to_write >=
 		    4096) { // don't write if exceeds buff size
 			printk("error: input exceeds buffer size.");
@@ -93,7 +93,6 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 	mutex_unlock(&lock);
 
 	if (*offset >= len) { // reached EOF
-		// printk("")
 		kfree(kbuffer);
 		return 0;
 	}
@@ -191,21 +190,42 @@ static int make_proc_entry(void)
 	return 0;
 }
 
-static void timer_callb(struct timer_list *timer) {
-    queue_work(mp1_wq, &mp1_work);  // sched workqueue task
-    mod_timer(&my_timer, jiffies +  msecs_to_jiffies(TIMEOUT));  // restart timer
+static void timer_callb(struct timer_list *timer)
+{
+	queue_work(mp1_wq, &mp1_work); // sched workqueue task
+	mod_timer(&my_timer,
+		  jiffies + msecs_to_jiffies(TIMEOUT)); // restart timer
 }
 
+static void work_handler(struct work_struct *work)
+{
+	// printk(KERN_INFO "DEBUG: timer expired. work func() exec'd\n");
+	struct list_head *p, *n;
+	struct proc_t *entry;
+	int status;
+	unsigned long cpu_time;
 
-static void work_handler(struct work_struct *work) {
-	 printk(KERN_INFO "timer expired. work func() exec'd");
+	mutex_lock(&lock);
+	list_for_each_safe (p, n, &my_proc_list) {
+		entry = list_entry(p, struct proc_t, list);
+		if (get_cpu_use(entry->pid, &cpu_time) == 0) {
+			// printk(KERN_INFO
+			//        "DEBUG: Updating PID %d CPU time to %lu\n",
+			       entry->pid, cpu_time);
+			entry->u_time = cpu_time;
+		} else {
+			list_del(p);
+			kfree(entry);
+		}
+	}
+	mutex_unlock(&lock);
 }
 
 static int __init test_module_init(void)
 {
 	make_proc_entry();
 
-	mp1_wq = alloc_workqueue("mp1_wq", WQ_UNBOUND, 0); 
+	mp1_wq = alloc_workqueue("mp1_wq", WQ_UNBOUND, 0);
 
 	INIT_WORK(&mp1_work, work_handler);
 
@@ -213,7 +233,7 @@ static int __init test_module_init(void)
 	timer_setup(&my_timer, timer_callb, 0);
 
 	/* setup interval to 5 secs (5000ms) */
-	mod_timer(&my_timer,  jiffies + msecs_to_jiffies(TIMEOUT));
+	mod_timer(&my_timer, jiffies + msecs_to_jiffies(TIMEOUT));
 
 	pr_warn("Hello, world\n");
 
@@ -229,14 +249,22 @@ static void __exit test_module_exit(void)
 	remove_proc_entry(FOLDER_NAME, NULL); // remove 'mp1' dir
 
 	del_timer_sync(&my_timer); // del timer when unloading
-	
+
 	flush_workqueue(mp1_wq);
 
 	destroy_workqueue(mp1_wq);
-	
-	pr_warn("Goodbye\n");
 
+	/* delete list last */
+	struct list_head *ptr, *tmp;
+	struct proc_t *entry;
 
+	mutex_lock(&lock);
+	list_for_each_safe (ptr, tmp, &my_proc_list) {
+		entry = list_entry(ptr, struct proc_t, list);
+		list_del(ptr);
+		kfree(entry);
+	}
+	mutex_unlock(&lock);
 }
 
 module_exit(test_module_exit);

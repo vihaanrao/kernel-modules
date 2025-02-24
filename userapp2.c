@@ -1,3 +1,4 @@
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -45,7 +46,7 @@ int read_from_proc(void)
 	/* read till eof and add pid to buffer */
 	while (fgets(buffer, sizeof(buffer), file)) {
 		if (sscanf(buffer, "%d: %lu", &pid, &cpu_time) == 2)
-			printf("%d: %lu\n", pid, cpu_time);
+			printf("PID: %d, CPU Time: %lu\n", pid, cpu_time);
 	}
 
 	fclose(file);
@@ -57,11 +58,8 @@ int main(void)
 	int pid = getpid();
 
 	write_to_proc(pid);
-	for (int i = 0; i < 3; i++) {
-		fac();
-		read_from_proc();
-		sleep(5);
-	}
-	printf("Done.\n");
-	return 0;
+
+	fac();
+
+	read_from_proc();
 }
