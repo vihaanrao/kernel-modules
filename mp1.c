@@ -9,8 +9,6 @@
  */
 
 #include <asm-generic/errno-base.h>
-// #include <stdlib.h>
-// #include <stdio.h>
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/init.h>
@@ -45,6 +43,7 @@ static struct workqueue_struct *mp1_wq; // Workqueue
 static struct work_struct mp1_work; // Work item
 struct timer_list my_timer;
 
+/* struct to define our process entry */
 typedef struct proc_t {
 	int pid;
 	struct list_head list;
@@ -52,6 +51,7 @@ typedef struct proc_t {
 
 } proc_t;
 
+/* read from /proc/mp1/status */
 static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 			       size_t count, loff_t *offset)
 {
@@ -73,7 +73,7 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 				    proc_entry->pid, proc_entry->u_time);
 		if (len + to_write >=
 		    4096) { // don't write if exceeds buff size
-			printk("error: input exceeds buffer size.");
+			printk(KERN_ERR "error: input exceeds buffer size.");
 			break;
 		}
 		len += to_write;
@@ -90,7 +90,8 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 	}
 
 	if (copy_to_user(user_buff, kbuffer + *offset, count)) {
-		printk("error: unable to copy kernel buffer to user");
+		printk(KERN_ERR
+		       "error: unable to copy kernel buffer to user");
 		kfree(kbuffer);
 		return -EFAULT;
 	}
@@ -103,26 +104,27 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 {
 	int pid = 0;
 	int not_copied_bytes = 0;
-	char *kbuffer = kmalloc(len + 1, GFP_KERNEL); // +1 for \n byte
+	struct proc_t *proc_entry;
 
-	/* alloc mem for proc_t struct to hold process entry */
-	struct proc_t *proc_entry = kmalloc(sizeof(proc_t), GFP_KERNEL);
-	if (proc_entry == NULL) {
-		printk("unable to allocate memory for proc_entry struct");
+	char *kbuffer = kmalloc(len + 1, GFP_KERNEL); // +1 for \n byte
+	if (!kbuffer) {
+		printk(KERN_ERR
+		       "unable to allocate memory for kernel buffer");
 		return -ENOMEM;
 	}
 
-	/* allocate memory for temp buffer to hold the pid */
-	if (kbuffer == NULL) {
-		printk("unable to allocate memory for kernel buffer");
-		kfree(proc_entry);
+	proc_entry = kmalloc(sizeof(proc_t), GFP_KERNEL);
+	if (!proc_entry) {
+		printk(KERN_ERR
+		       "unable to allocate memory for proc_entry struct");
 		return -ENOMEM;
 	}
 
 	/* copy pid data from usr space */
 	not_copied_bytes = copy_from_user(kbuffer, user_buff, len);
 	if (not_copied_bytes > 0) {
-		printk("copy_from_user failed to cpy %d bytes",
+		printk(KERN_ERR
+		       "error: copy_from_user failed to cpy %d bytes",
 		       not_copied_bytes);
 		kfree(kbuffer);
 		kfree(proc_entry);
@@ -133,13 +135,14 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 
 	/* parse string in kbuff to int */
 	if (kstrtoint(kbuffer, 10, &pid) != 0) {
-		printk("error in decimal to string conversion for pid");
+		printk(KERN_ERR
+		       "error in decimal to string conversion for pid");
 		kfree(kbuffer);
 		kfree(proc_entry);
 		return -EINVAL;
 	}
 
-	kfree(kbuffer); // done w/ temp kbuffer
+	kfree(kbuffer);
 
 	proc_entry->pid = pid;
 	proc_entry->u_time = 0;
@@ -147,23 +150,23 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 	list_add_tail(&proc_entry->list, &my_proc_list);
 	mutex_unlock(&lock);
 
-	// snprintf("DEBUG: The value of the PID is: %d", pid);
-	// printk("proc_write_callb: successfully added PID %d\n", pid);
 	return len;
 }
-// procfs file ops for entry
+
+/* procfs file ops for entry */
 static const struct proc_ops fops = {
 	// .proc_open = open_callback,
 	.proc_read = proc_read_callb,
 	.proc_write = proc_write_callb
 };
 
+/* create 'mp1' dir and 'status' file */
 static int make_proc_entry(void)
 {
 	struct proc_dir_entry *entry = NULL;
 	proc_dir = proc_mkdir(FOLDER_NAME, NULL);
 	if (proc_dir == NULL) {
-		printk("unable to create directory 'mp1'");
+		printk(KERN_ERR "unable to create directory 'mp1'");
 		return -ENOMEM;
 	}
 
@@ -178,6 +181,10 @@ static int make_proc_entry(void)
 	return 0;
 }
 
+/*  on timer expiration jump here to:
+ * 1. schedule workqueue task 
+ * 2. reset timer 
+ * */
 static void timer_callb(struct timer_list *timer)
 {
 	queue_work(mp1_wq, &mp1_work); // sched workqueue task
@@ -185,23 +192,22 @@ static void timer_callb(struct timer_list *timer)
 		  jiffies + msecs_to_jiffies(TIMEOUT)); // restart timer
 }
 
+/* upon timer expiration queue the work_handler to the workqueue.*/
 static void work_handler(struct work_struct *work)
 {
 	// printk(KERN_INFO "DEBUG: timer expired. work func() exec'd\n");
-	struct list_head *p, *n;
+	struct list_head *curr, *next;
 	struct proc_t *entry;
 	unsigned long cpu_time;
 
+	/* iterate through the kernel LL to get_cpu_use and update each proc_t entry */
 	mutex_lock(&lock);
-	list_for_each_safe (p, n, &my_proc_list) {
-		entry = list_entry(p, struct proc_t, list);
+	list_for_each_safe (curr, next, &my_proc_list) {
+		entry = list_entry(curr, struct proc_t, list);
 		if (get_cpu_use(entry->pid, &cpu_time) == 0) {
-			// printk(KERN_INFO
-			//        "DEBUG: Updating PID %d CPU time to %lu\n",
-			// entry->pid, cpu_time;
 			entry->u_time = cpu_time;
 		} else {
-			list_del(p);
+			list_del(curr);
 			kfree(entry);
 		}
 	}
@@ -222,29 +228,26 @@ static int __init test_module_init(void)
 	/* setup interval to 5 secs (5000ms) */
 	mod_timer(&my_timer, jiffies + msecs_to_jiffies(TIMEOUT));
 
-	pr_warn("Hello, world\n");
-
 	return 0;
 }
 
 module_init(test_module_init);
 
+/* clean up on rmmod */
 static void __exit test_module_exit(void)
 {
 	struct list_head *p, *n;
 	struct proc_t *entry;
-	remove_proc_entry(FILE_NAME, proc_dir); // remove 'status' file
 
+	remove_proc_entry(FILE_NAME, proc_dir); // remove 'status' file
 	remove_proc_entry(FOLDER_NAME, NULL); // remove 'mp1' dir
 
-	del_timer_sync(&my_timer); // del timer when unloading
+	del_timer_sync(&my_timer);
 
 	flush_workqueue(mp1_wq);
-
 	destroy_workqueue(mp1_wq);
 
-	/* delete list last */
-
+	/* delete LL */
 	mutex_lock(&lock);
 	list_for_each_safe (p, n, &my_proc_list) {
 		entry = list_entry(p, struct proc_t, list);
