@@ -24,42 +24,41 @@ int write_to_proc(int pid)
 	}
 
 	fprintf(file, "%d", pid);
-        fflush(file);
+	fflush(file);
 	fclose(file);
 	return 0;
 }
 
 int read_from_proc(void)
 {
-        char buffer[256];
-        int pid;
+	char buffer[256];
+	int pid;
 	FILE *file = fopen("/proc/mp1/status", "r");
 	if (file == NULL) {
 		perror("error: unable to open file");
 		return EXIT_FAILURE;
 	}
-        
-    printf("starting read form /proc/status/mp1\n");
 
-    /* read till eof and add pid to buffer */    
-    while (fgets(buffer, sizeof(buffer), file)) {
-        if (sscanf(buffer, "PID: %d", &pid) == 1) {
-            printf("PID: %d\n", pid);
-        }
-    }
-   
-    fclose(file);
-    return EXIT_SUCCESS;
+	printf("starting read form /proc/status/mp1\n");
 
+	/* read till eof and add pid to buffer */
+	while (fgets(buffer, sizeof(buffer), file)) {
+		if (sscanf(buffer, "PID: %d", &pid) == 1) {
+			printf("PID: %d\n", pid);
+		}
+	}
+
+	fclose(file);
+	return EXIT_SUCCESS;
 }
 
-int main(void) {
-    
-    int pid = getpid();
+int main(void)
+{
+	int pid = getpid();
 
-    write_to_proc(pid);
+	write_to_proc(pid);
 
-    int fac();
+	int fac();
 
-    read_from_proc();
+	read_from_proc();
 }
