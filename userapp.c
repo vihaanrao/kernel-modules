@@ -1,20 +1,24 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-int fac(void)
-{
-	// Please tweak the iteration counts to make this calculation run long enough
-	volatile long long unsigned int sum = 0;
-	for (int i = 0; i < 100000000; i++) {
-		volatile long long unsigned int fac = 1;
-		for (int j = 1; j <= 50; j++) {
-			fac *= j;
-		}
-		sum += fac;
-	}
-	return 0;
-}
+// int fac(void)
+// {
+// 	// Please tweak the iteration counts to make this calculation run long enough
+// 	volatile long long unsigned int sum = 0;
+// 	for (int i = 0; i < 100000000; i++) {
+// 		volatile long long unsigned int fac = 1;
+// 		for (int j = 1; j <= 50; j++) {
+// 			fac *= j;
+// 		}
+// 		sum += fac;
+// 	}
+// 	return 0;
+// }
 
+long long fib (int n) {
+	if (n <= 1) return n;
+	return fib (n - 1) + fib(n - 2);
+}
 int write_to_proc(int pid)
 {
 	FILE *file = fopen("/proc/mp1/status", "w");
@@ -57,11 +61,11 @@ int main(void)
 	int pid = getpid();
 
 	write_to_proc(pid);
-	for (int i = 0; i < 3; i++) {
-		fac();
-		read_from_proc();
-		sleep(5);
-	}
+
+	// fac();
+	fib(45);
+	read_from_proc();
+
 	printf("Done.\n");
 	return 0;
 }

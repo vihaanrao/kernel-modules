@@ -2,19 +2,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-int fac(void)
+#include <time.h>
+
+void busy_work(double seconds)
 {
-	// Please tweak the iteration counts to make this calculation run long enough
-	volatile long long unsigned int sum = 0;
-	for (int i = 0; i < 100000000; i++) {
-		volatile long long unsigned int fac = 1;
-		for (int j = 1; j <= 50; j++) {
-			fac *= j;
-		}
-		sum += fac;
+	clock_t start = clock();
+	while ((double)(clock() - start) / CLOCKS_PER_SEC < seconds) {
+		volatile double x = 1.0;
+		for (int i = 0; i < 1000000; i++) {
+			x *= 1.0000001; 		}
 	}
-	return 0;
 }
+
 
 int write_to_proc(int pid)
 {
@@ -41,7 +40,7 @@ int read_from_proc(void)
 		return EXIT_FAILURE;
 	}
 
-	printf("starting read form /proc/status/mp1\n");
+	// printf("starting read form /proc/status/mp1\n");
 
 	/* read till eof and add pid to buffer */
 	while (fgets(buffer, sizeof(buffer), file)) {
@@ -59,7 +58,6 @@ int main(void)
 
 	write_to_proc(pid);
 
-	fac();
-
+	busy_work(15);
 	read_from_proc();
 }

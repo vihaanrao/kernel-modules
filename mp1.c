@@ -52,23 +52,12 @@ typedef struct proc_t {
 
 } proc_t;
 
-// temp proc printf callback
-static int myproc_show(struct seq_file *m, void *v)
-{
-	seq_printf(m, "Hello from procfs directory!\n");
-	return 0;
-}
-
-// temp proc open callback
-// static int open_callback(struct inode *inode, struct file *file)
-// {
-// 	return single_open(file, myproc_show, NULL);
-// }
-
 static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 			       size_t count, loff_t *offset)
 {
+	struct proc_t *proc_entry;
 	struct list_head *ptr;
+
 	int len = 0;
 	int to_write = 0;
 	// char kbuffer[4096];
@@ -76,7 +65,6 @@ static ssize_t proc_read_callb(struct file *file, char __user *user_buff,
 	if (!kbuffer) {
 		return -ENOMEM;
 	}
-	struct proc_t *proc_entry;
 
 	mutex_lock(&lock);
 	list_for_each (ptr, &my_proc_list) {
@@ -115,6 +103,7 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 {
 	int pid = 0;
 	int not_copied_bytes = 0;
+	char *kbuffer = kmalloc(len + 1, GFP_KERNEL); // +1 for \n byte
 
 	/* alloc mem for proc_t struct to hold process entry */
 	struct proc_t *proc_entry = kmalloc(sizeof(proc_t), GFP_KERNEL);
@@ -124,7 +113,6 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 	}
 
 	/* allocate memory for temp buffer to hold the pid */
-	char *kbuffer = kmalloc(len + 1, GFP_KERNEL); // +1 for \n byte
 	if (kbuffer == NULL) {
 		printk("unable to allocate memory for kernel buffer");
 		kfree(proc_entry);
@@ -160,7 +148,7 @@ static ssize_t proc_write_callb(struct file *file, const char __user *user_buff,
 	mutex_unlock(&lock);
 
 	// snprintf("DEBUG: The value of the PID is: %d", pid);
-	printk("proc_write_callb: successfully added PID %d\n", pid);
+	// printk("proc_write_callb: successfully added PID %d\n", pid);
 	return len;
 }
 // procfs file ops for entry
@@ -202,7 +190,6 @@ static void work_handler(struct work_struct *work)
 	// printk(KERN_INFO "DEBUG: timer expired. work func() exec'd\n");
 	struct list_head *p, *n;
 	struct proc_t *entry;
-	int status;
 	unsigned long cpu_time;
 
 	mutex_lock(&lock);
@@ -211,7 +198,7 @@ static void work_handler(struct work_struct *work)
 		if (get_cpu_use(entry->pid, &cpu_time) == 0) {
 			// printk(KERN_INFO
 			//        "DEBUG: Updating PID %d CPU time to %lu\n",
-			       entry->pid, cpu_time);
+			// entry->pid, cpu_time;
 			entry->u_time = cpu_time;
 		} else {
 			list_del(p);
@@ -244,6 +231,8 @@ module_init(test_module_init);
 
 static void __exit test_module_exit(void)
 {
+	struct list_head *p, *n;
+	struct proc_t *entry;
 	remove_proc_entry(FILE_NAME, proc_dir); // remove 'status' file
 
 	remove_proc_entry(FOLDER_NAME, NULL); // remove 'mp1' dir
@@ -255,13 +244,11 @@ static void __exit test_module_exit(void)
 	destroy_workqueue(mp1_wq);
 
 	/* delete list last */
-	struct list_head *ptr, *tmp;
-	struct proc_t *entry;
 
 	mutex_lock(&lock);
-	list_for_each_safe (ptr, tmp, &my_proc_list) {
-		entry = list_entry(ptr, struct proc_t, list);
-		list_del(ptr);
+	list_for_each_safe (p, n, &my_proc_list) {
+		entry = list_entry(p, struct proc_t, list);
+		list_del(p);
 		kfree(entry);
 	}
 	mutex_unlock(&lock);
